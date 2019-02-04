@@ -1,3 +1,10 @@
+# Written by: Hagop Awakian
+# Student ID: 27747632
+# Instructor: Dr. Abdelwahab Elnaka
+# For COMP 445 Section W
+# Winter 2019
+# Date Submitted: Sunday February 3 2019
+
 import argparse
 from sys import exit
 import socket
