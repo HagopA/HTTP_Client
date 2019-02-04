@@ -1,21 +1,21 @@
 import argparse
 from sys import exit
-import http
-from urllib3 import util
+import socket
+from urllib.parse import urlparse
 
 
 def help_output():
     output = '\nhttpc is a curl-like application but supports HTTP protocol only.\nUsage:\n\thttpc.py command ' \
              '[arguments]\nThe commands are:\n\tget\texecutes a HTTP GET request and prints the response.\n\tpost\t' \
              'executes a HTTP POST request and prints the response.\n\thelp\tprints this screen.\n\n' \
-             'Use "httpc help [command]" for more information about a command.'
+             'Use "httpc help [command]" for more information about a command.\n'
     return output
 
 
 def help_get_output():
     output = '\nusage: httpc get [-v] [-h key:value] URL\n\nGet executes a HTTP GET request for a given URL.\n\t-v' \
              '\t\tPrints the detail of the response such as protocol, status, and headers.\n\t-h key:value\t' \
-             'Associates headers to HTTP Request with the format "key:value".'
+             'Associates headers to HTTP Request with the format "key:value".\n'
     return output
 
 
@@ -42,80 +42,115 @@ def help_command():
 
 
 def get_request(url, v, h):
-    """Get executes a HTTP GET request for a given URL."""
-    conn = http.client.HTTPConnection(util.parse_url(url).host)
 
-    # Stores the headers received from the command line in a dictionary
-    # flat_h = [item for i in h for item in i.split(":")]
-    # headers = dict(zip(*[iter(flat_h)] * 2))
+    skt = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    skt.connect((url.netloc, 80))
 
-    conn.request("GET", url)
-    response = conn.getresponse()
+    if h:
+        if ':' not in h:
+            print("Error: please format the header (-h) in the form of 'key:value'.")
+            return
+        else:
+            concatenated_url_string = "GET " + url.path + "?" + url.query.replace("%26", "&") + " HTTP/1.1\r\nHost: " \
+                                      + url.netloc + "\r\n" + h + "\r\n\r\n"
+    else:
+        concatenated_url_string = "GET " + url.path + "?" + url.query.replace("%26", "&") + " HTTP/1.1\r\nHost: " \
+                                  + url.netloc + "\r\n\r\n"
+
+    request = concatenated_url_string.encode()
+    skt.send(request)
 
     if v:
-        print(response.version, response.status, response.reason)
-        print(response.headers)
-        print(response.read().decode('utf-8'))
+        print(skt.recv(4096).decode("utf-8"))
     else:
-        print(response.read().decode('utf-8'))
+        response = skt.recv(4096).decode("utf-8")
+        try:
+            index = response.index('{')
+            print(response[index:])
+        except ValueError:
+            print(response)
 
-    conn.close()
+    skt.close()
 
 
 def post_request(url, v, h, d, f):
-    """Post executes a HTTP POST request for a given URL with inline data or from
-    file."""
-    conn = http.client.HTTPConnection(util.parse_url(url).host)
+    skt = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    skt.connect((url.netloc, 80))
 
-    # Stores the headers received from the command line in a dictionary
-    # flat_h = [item for i in h for item in i.split(":")]
-    # headers = dict(zip(*[iter(flat_h)] * 2))
+    data = None
 
-    body = None
+    if d:
+        data = "Content-Length:" + str(len(d)) + "\r\n\r\n" + d
+    elif f:
+        file = open(f, 'r')
+        d = file.read()
+        file.close()
+        data = "Content-Length:" + str(len(d)) + "\r\n\r\n" + d
 
-    if d and not f:
-        body = d
-    elif not d and f:
-        body = f.read()
+    if h:
+        if ':' not in h:
+            print("Error: please format the header (-h) in the form of 'key:value'.")
+            return
+        else:
+            if data:
+                concatenated_url_string = "POST " + url.path + "?" + url.query.replace("%26", "&") + \
+                                          " HTTP/1.1\r\nHost: " + url.netloc + "\r\n" + h + "\r\n" + data + "\r\n"
+            else:
+                concatenated_url_string = "POST " + url.path + "?" + url.query.replace("%26", "&") + \
+                                          " HTTP/1.1\r\nHost: " + url.netloc + "\r\n" + h + "\r\n\r\n"
+    else:
+        if data:
+            concatenated_url_string = "POST " + url.path + "?" + url.query.replace("%26", "&") + " HTTP/1.1\r\nHost: " \
+                                  + url.netloc + "\r\n" + data + "\r\n"
+        else:
+            concatenated_url_string = "POST " + url.path + "?" + url.query.replace("%26", "&") + " HTTP/1.1\r\nHost: " \
+                                      + url.netloc + "\r\n" + "\r\n\r\n"
 
-    conn.request("POST", url, body=body)
-    response = conn.getresponse()
+    request = concatenated_url_string.encode()
+    skt.send(request)
 
     if v:
-        print(response.version, response.status, response.reason)
-        print(response.headers)
-        print(response.read().decode('utf-8'))
+        print(skt.recv(4096).decode("utf-8"))
     else:
-        print(response.read().decode('utf-8'))
+        response = skt.recv(4096).decode("utf-8")
+        try:
+            index = response.index('{')
+            print(response[index:])
+        except ValueError:
+            print(response)
 
-    conn.close()
+    skt.close()
 
 
 parser = argparse.ArgumentParser(add_help=False)
 parser.add_argument('command', type=str, help=help_output(), choices=['help', 'get', 'post'])
 parser.add_argument('arg2', nargs='?', type=str)
-parser.add_argument('-v', '--verbose', action='store_true')
+parser.add_argument('-v', '--verbose', action="store_true")
 parser.add_argument('-h', '--header')
 parser.add_argument('-d', '--data')
 parser.add_argument('-f', '--file')
 args = parser.parse_args()
-
-print(args)
 
 if args.command == 'help':
     help_command()
 
 elif args.command == 'get':
     if args.data or args.file:
-        print('Error: -d (--data) or -f (--file) are not accepted arguments for the "get" command.')
+        print('Error: -d (--data) or -f (--file) are not accepted arguments for the "get" command. Enter "httpc '
+              'help [get, post] to get help.')
         exit()
     elif args.arg2:
-        url2 = args.arg2.replace("'", "")
-        print(args.header)
-        get_request(url2, args.verbose, args.header)
+        unquoted_url = args.arg2.replace("'", "")
+        parsed_url = urlparse(unquoted_url)
+        get_request(parsed_url, args.verbose, args.header)
     else:
-        print('Error: no URL has been specified. URL is required after the "get"')
+        print('Error: no URL has been specified. URL is required after "get"')
         exit()
 
 elif args.command == 'post':
-    post_request(args.arg2, args.verbose, args.header, args.data, args.file)
+    if args.data and args.file:
+        print("Error: -d and -f can't be used in the same command.")
+        exit()
+    unquoted_url = args.arg2.replace("'", "")
+    parsed_url = urlparse(unquoted_url)
+    post_request(parsed_url, args.verbose, args.header, args.data, args.file)
