@@ -48,7 +48,7 @@ def help_command():
             print("Error: Unknown second argument. Options are 'get' or 'post' after 'help'")
 
 
-def get_request(url, v, h):
+def get_request(url, v, h, o):
 
     skt = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     skt.connect((url.netloc, 80))
@@ -66,25 +66,42 @@ def get_request(url, v, h):
 
     request = concatenated_url_string.encode()
     skt.send(request)
+    file = None
 
-    if v:
-        print(skt.recv(4096).decode("utf-8"))
+    if o:
+        if v:
+            file = open(o, 'w')
+            file.write(skt.recv(4096).decode("utf-8"))
+        else:
+            file = open(o, 'w')
+            response = skt.recv(4096).decode("utf-8")
+            try:
+                index = response.index('{')
+                file.write(response[index:])
+            except ValueError:
+                file.write(response)
     else:
-        response = skt.recv(4096).decode("utf-8")
-        try:
-            index = response.index('{')
-            print(response[index:])
-        except ValueError:
-            print(response)
+        if v:
+            print(skt.recv(4096).decode("utf-8"))
+        else:
+            response = skt.recv(4096).decode("utf-8")
+            try:
+                index = response.index('{')
+                print(response[index:])
+            except ValueError:
+                print(response)
 
     skt.close()
+    if file:
+        file.close()
 
 
-def post_request(url, v, h, d, f):
+def post_request(url, v, h, d, f, o):
     skt = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     skt.connect((url.netloc, 80))
 
     data = None
+    file_to_write = None
 
     if d:
         data = "Content-Length:" + str(len(d)) + "\r\n\r\n" + d
@@ -115,27 +132,42 @@ def post_request(url, v, h, d, f):
 
     request = concatenated_url_string.encode()
     skt.send(request)
-
-    if v:
-        print(skt.recv(4096).decode("utf-8"))
+    if o:
+        if v:
+            file_to_write = open(o, 'w')
+            file_to_write.write(skt.recv(4096).decode("utf-8"))
+        else:
+            file_to_write = open(o, 'w')
+            response = skt.recv(4096).decode("utf-8")
+            try:
+                index = response.index('{')
+                file_to_write.write(response[index:])
+            except ValueError:
+                file_to_write.write(response)
     else:
-        response = skt.recv(4096).decode("utf-8")
-        try:
-            index = response.index('{')
-            print(response[index:])
-        except ValueError:
-            print(response)
+        if v:
+            print(skt.recv(4096).decode("utf-8"))
+        else:
+            response = skt.recv(4096).decode("utf-8")
+            try:
+                index = response.index('{')
+                print(response[index:])
+            except ValueError:
+                print(response)
 
     skt.close()
+    if file_to_write:
+        file_to_write.close()
 
 
 parser = argparse.ArgumentParser(add_help=False)
 parser.add_argument('command', type=str, help=help_output(), choices=['help', 'get', 'post'])
-parser.add_argument('arg2', nargs='?', type=str)
+parser.add_argument('arg2', type=str)
 parser.add_argument('-v', '--verbose', action="store_true")
 parser.add_argument('-h', '--header')
 parser.add_argument('-d', '--data')
 parser.add_argument('-f', '--file')
+parser.add_argument('-o', '--filename')
 args = parser.parse_args()
 
 if args.command == 'help':
@@ -149,7 +181,7 @@ elif args.command == 'get':
     elif args.arg2:
         unquoted_url = args.arg2.replace("'", "")
         parsed_url = urlparse(unquoted_url)
-        get_request(parsed_url, args.verbose, args.header)
+        get_request(parsed_url, args.verbose, args.header, args.filename)
     else:
         print('Error: no URL has been specified. URL is required after "get"')
         exit()
@@ -160,4 +192,4 @@ elif args.command == 'post':
         exit()
     unquoted_url = args.arg2.replace("'", "")
     parsed_url = urlparse(unquoted_url)
-    post_request(parsed_url, args.verbose, args.header, args.data, args.file)
+    post_request(parsed_url, args.verbose, args.header, args.data, args.file, args.filename)
